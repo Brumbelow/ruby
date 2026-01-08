@@ -3345,6 +3345,7 @@ iseq_type_id(enum rb_iseq_type type)
 static VALUE
 iseq_data_to_ary(const rb_iseq_t *iseq)
 {
+    VALUE iseq_value = (VALUE)iseq;
     unsigned int i;
     long l;
     const struct rb_iseq_constant_body *const iseq_body = ISEQ_BODY(iseq);
@@ -3677,6 +3678,9 @@ iseq_data_to_ary(const rb_iseq_t *iseq)
     rb_ary_push(val, params);
     rb_ary_push(val, exception);
     rb_ary_push(val, body);
+
+    RB_GC_GUARD(iseq_value);
+
     return val;
 }
 
@@ -3936,7 +3940,6 @@ rb_vm_insn_decode(const VALUE encoded)
 static inline int
 encoded_iseq_trace_instrument(VALUE *iseq_encoded_insn, rb_event_flag_t turnon, bool remain_traced)
 {
-    ASSERT_vm_locking();
     st_data_t key = (st_data_t)*iseq_encoded_insn;
     st_data_t val;
 

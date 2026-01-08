@@ -83,15 +83,13 @@ init_inetsock_internal(VALUE v)
     VALUE open_timeout = arg->open_timeout;
     VALUE timeout;
     VALUE starts_at;
-    unsigned int timeout_msec;
 
     timeout = NIL_P(open_timeout) ? resolv_timeout : open_timeout;
-    timeout_msec = NIL_P(timeout) ? 0 : rsock_value_timeout_to_msec(timeout);
     starts_at = current_clocktime();
 
     arg->remote.res = rsock_addrinfo(arg->remote.host, arg->remote.serv,
                                      family, SOCK_STREAM,
-                                     (type == INET_SERVER) ? AI_PASSIVE : 0, timeout_msec);
+                                     (type == INET_SERVER) ? AI_PASSIVE : 0, timeout);
 
     /*
      * Maybe also accept a local address
@@ -99,7 +97,7 @@ init_inetsock_internal(VALUE v)
 
     if (type != INET_SERVER && (!NIL_P(arg->local.host) || !NIL_P(arg->local.serv))) {
         arg->local.res = rsock_addrinfo(arg->local.host, arg->local.serv,
-                                        family, SOCK_STREAM, 0, 0);
+                                        family, SOCK_STREAM, 0, timeout);
     }
 
     VALUE io = Qnil;
@@ -258,6 +256,21 @@ is_specified_ip_address(const char *hostname)
 
     return (inet_pton(AF_INET6, hostname, &ipv6addr) == 1 ||
             inet_pton(AF_INET, hostname, &ipv4addr) == 1);
+}
+
+static int
+is_local_port_fixed(const char *portp)
+{
+    if (!portp) return 0;
+
+    char *endp;
+    errno = 0;
+    long port = strtol(portp, &endp, 10);
+
+    if (endp == portp) return 0;
+    if (errno == ERANGE) return 0;
+
+    return port > 0;
 }
 
 struct fast_fallback_inetsock_arg
@@ -630,14 +643,7 @@ init_fast_fallback_inetsock_internal(VALUE v)
         arg->getaddrinfo_shared = NULL;
 
         int family = arg->families[0];
-        unsigned int t;
-        if (!NIL_P(open_timeout)) {
-            t = rsock_value_timeout_to_msec(open_timeout);
-        } else if (!NIL_P(open_timeout)) {
-            t = rsock_value_timeout_to_msec(resolv_timeout);
-        } else {
-            t = 0;
-        }
+        VALUE t = NIL_P(open_timeout) ? resolv_timeout : open_timeout;
 
         arg->remote.res = rsock_addrinfo(
             arg->remote.host,
@@ -1323,13 +1329,15 @@ rsock_init_inetsock(
 
     if (type == INET_CLIENT && FAST_FALLBACK_INIT_INETSOCK_IMPL == 1 && RTEST(fast_fallback)) {
         struct rb_addrinfo *local_res = NULL;
-        char *hostp, *portp;
-        char hbuf[NI_MAXHOST], pbuf[NI_MAXSERV];
+        char *hostp, *portp, *local_portp;
+        char hbuf[NI_MAXHOST], pbuf[NI_MAXSERV], local_pbuf[NI_MAXSERV];
         int additional_flags = 0;
+        int local_flags = 0;
         hostp = raddrinfo_host_str(remote_host, hbuf, sizeof(hbuf), &additional_flags);
         portp = raddrinfo_port_str(remote_serv, pbuf, sizeof(pbuf), &additional_flags);
+        local_portp = raddrinfo_port_str(local_serv, local_pbuf, sizeof(local_pbuf), &local_flags);
 
-        if (!is_specified_ip_address(hostp)) {
+        if (!is_specified_ip_address(hostp) && !is_local_port_fixed(local_portp)) {
             int target_families[2] = { 0, 0 };
             int resolving_family_size = 0;
 
@@ -1337,15 +1345,7 @@ rsock_init_inetsock(
              * Maybe also accept a local address
              */
             if (!NIL_P(local_host) || !NIL_P(local_serv)) {
-                unsigned int t;
-                if (!NIL_P(open_timeout)) {
-                    t = rsock_value_timeout_to_msec(open_timeout);
-                } else if (!NIL_P(open_timeout)) {
-                    t = rsock_value_timeout_to_msec(resolv_timeout);
-                } else {
-                    t = 0;
-                }
-
+                VALUE t = NIL_P(open_timeout) ? resolv_timeout : open_timeout;
                 local_res = rsock_addrinfo(
                     local_host,
                     local_serv,
@@ -1609,7 +1609,7 @@ static VALUE
 ip_s_getaddress(VALUE obj, VALUE host)
 {
     union_sockaddr addr;
-    struct rb_addrinfo *res = rsock_addrinfo(host, Qnil, AF_UNSPEC, SOCK_STREAM, 0, 0);
+    struct rb_addrinfo *res = rsock_addrinfo(host, Qnil, AF_UNSPEC, SOCK_STREAM, 0, Qnil);
     socklen_t len = res->ai->ai_addrlen;
 
     /* just take the first one */

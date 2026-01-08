@@ -1226,10 +1226,10 @@ rb_complex_pow(VALUE self, VALUE other)
 
 /*
  * call-seq:
- *   complex == object -> true or false
+ *   self == other -> true or false
  *
- * Returns +true+ if <tt>self.real == object.real</tt>
- * and <tt>self.imag == object.imag</tt>:
+ * Returns whether both <tt>self.real == other.real</tt>
+ * and <tt>self.imag == other.imag</tt>:
  *
  *   Complex.rect(2, 3)  == Complex.rect(2.0, 3.0) # => true
  *
@@ -1260,14 +1260,16 @@ nucomp_real_p(VALUE self)
 
 /*
  * call-seq:
- *   complex <=> object -> -1, 0, 1, or nil
+ *   self <=> other -> -1, 0, 1, or nil
+ *
+ * Compares +self+ and +other+.
  *
  * Returns:
  *
- * - <tt>self.real <=> object.real</tt> if both of the following are true:
+ * - <tt>self.real <=> other.real</tt> if both of the following are true:
  *
  *   - <tt>self.imag == 0</tt>.
- *   - <tt>object.imag == 0</tt>. # Always true if object is numeric but not complex.
+ *   - <tt>other.imag == 0</tt> (always true if +other+ is numeric but not complex).
  *
  * - +nil+ otherwise.
  *
@@ -1280,6 +1282,8 @@ nucomp_real_p(VALUE self)
  *   Complex.rect(1) <=> Complex.rect(1, 1) # => nil # object.imag not zero.
  *   Complex.rect(1) <=> 'Foo'              # => nil # object.imag not defined.
  *
+ * \Class \Complex includes module Comparable,
+ * each of whose methods uses Complex#<=> for comparison.
  */
 static VALUE
 nucomp_cmp(VALUE self, VALUE other)
@@ -1772,12 +1776,6 @@ VALUE
 rb_complex_new_polar(VALUE x, VALUE y)
 {
     return f_complex_polar(rb_cComplex, x, y);
-}
-
-VALUE
-rb_complex_polar(VALUE x, VALUE y)
-{
-    return rb_complex_new_polar(x, y);
 }
 
 VALUE
